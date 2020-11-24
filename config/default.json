@@ -1,0 +1,4 @@
+{
+    "mongoURI":"mongodb+srv://MakkiBoukhris:KI4M1KA5mihniARx@cluster0.lwj7t.mongodb.net/MakkiBoukhris?retryWrites=true&w=majority",
+    "secretOrKey": "my secret"
+}
