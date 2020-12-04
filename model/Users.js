@@ -1,7 +1,9 @@
 const mongoose = require("mongoose");
 
+var Schema = mongoose.Schema;
+
 const contactSchema = mongoose.Schema({
-  _id: mongoose.Schema.Types.ObjectId,
+  // _id: mongoose.Schema.Types.ObjectId,
 
   name: {
     type: String,
@@ -34,7 +36,7 @@ const contactSchema = mongoose.Schema({
 
   CompanyName: String,
 
-  UserDescreption:String,
+  UserDescreption: String,
 
   ServiceDescription: String,
 
@@ -56,10 +58,29 @@ const contactSchema = mongoose.Schema({
 
   TableRowValues: [{}],
 
-  ProfileImage:{
+  ProfileImage: {
     data: Buffer,
     type: String,
-  }
+  },
+
+  waitingProjects: [
+    {
+      type: Schema.Types.ObjectId,
+      ref: "Project",
+    },
+  ],
+
+  actualProjects: [{}],
+
+  ratings: [{}],
+
+  basicBuyers: [{}],
+
+  standardBuyers: [{}],
+
+  premiumBuyers: [{}],
+
+  comments: [{}],
 });
 
 module.exports = User = mongoose.model("user", contactSchema);

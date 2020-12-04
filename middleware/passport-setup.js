@@ -12,13 +12,10 @@ const opts = {
 passport.initialize();
 passport.use(
   new JwtStrategy(opts, async (jwt_payload, done) => {
-    console.log('jwt_payload', jwt_payload)
     const { _id } = jwt_payload;
-    // console.log('_id', _id)
     try {
       const user = await User.findById(_id).select('-password');
       user ? done(null, user) : done(null, false);
-      console.log('user', user)
     } catch (error) {
       console.error(error);
     }

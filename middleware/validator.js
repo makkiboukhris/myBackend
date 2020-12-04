@@ -9,6 +9,13 @@ exports.registerRules = () =>[
     check("password").isLength({ min: 8 }),
   ];
 
+  // exports.projectRules = () =>[
+  //   check("projectDescription", "projectDescription is required !!!").notEmpty(),
+  //   check("budgetmax", "budgetmax is required !!!").notEmpty(),
+  //   check("delay", "delay is required !!!").notEmpty(),
+  //   check("skill","delay is required !!!").notEmpty(),
+  // ];
+
 // exports.updateRules = () =>[
 //   check('ProfileDomain','ProfileDomain is required').notEmpty,
 //   check('UserLocation','UserLocation is required').notEmpty,

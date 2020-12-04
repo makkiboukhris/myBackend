@@ -113,12 +113,14 @@ const express = require('express');
 
 const dbConnect = require('./config/dbConnect');
 const router = require('./routes/users');
+const projectRouter = require('./routes/projects')
 
 const app = express();
 app.use(express.json());
 // connect to db
 dbConnect();
 app.use('/', router);
+app.use('/project',projectRouter)
 
 const PORT =   4000 ;
 // || process.env.PORT 

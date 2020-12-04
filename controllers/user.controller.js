@@ -3,8 +3,8 @@ const jwt = require("jsonwebtoken");
 const config = require("config");
 const User = require("../model/Users");
 const mongoose = require("mongoose");
+const Project = require("../model/Projects");
 const secretOrKey = config.get("secretOrKey");
-
 
 exports.register = async (req, res) => {
   // console.log("req", req.body);
@@ -45,6 +45,54 @@ exports.register = async (req, res) => {
   }
 };
 
+exports.uploadPublicProject = async (req, res) => {
+  const {
+    projectName,
+    projectOwner,
+    projectDescription,
+    budgetmin,
+    budgetmax,
+    delay,
+    skill,
+  } = req.body;
+  const searchResult = await Project.findOne({ projectName });
+  console.log("searchResult", searchResult);
+  if (searchResult)
+    return res.status(400).json({ msg: `project already exist!` });
+  try {
+    const newProject = new Project({
+      projectName,
+      projectOwner,
+      projectDescription,
+      budgetmin,
+      budgetmax,
+      delay,
+      skill,
+      projectType: "PUBLIC",
+      projectFinished: false,
+    });
+    await User.findByIdAndUpdate(
+      { _id: projectOwner },
+      {
+        $push: {
+          actualProjects: {
+            projectName,
+            projectDescription,
+            projectOwner,
+            projectType: "PUBLIC",
+          },
+        },
+      },
+      { new: true }
+    );
+    newProject.save();
+    res.status(200).json(newProject);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ errors: error });
+  }
+};
+
 exports.login = async (req, res) => {
   const { email, password } = req.body;
   console.log("req.body", req.body);
@@ -60,7 +108,9 @@ exports.login = async (req, res) => {
       name: user.name,
       familyName: user.familyName,
       email: user.email,
-      userType:user.userType
+      userType: user.userType,
+      waitingProjects: user.waitingProjects,
+      actualProjects: user.actualProjects,
     };
 
     const token = await jwt.sign(payload, secretOrKey);
@@ -71,30 +121,28 @@ exports.login = async (req, res) => {
   }
 };
 
+exports.getList = async (req, res) => {
+  const ProfileDomain = req.headers.domain;
+  try {
+    const list = await User.find({ ProfileDomain });
+    return res.status(200).json({ list });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ errors: error });
+  }
+};
 
-
-exports.uploadProfileIMG = async (req,res) =>{
-  console.log('req.files', req.files)
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+exports.getSelectedProfile = async (req, res) => {
+  const _id = req.headers._id;
+  try {
+    const selectedProfile = await User.findById({ _id });
+    // console.log('selectedProfile', selectedProfile)
+    return res.status(200).json({ selectedProfile });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ errors: error });
+  }
+};
 
 exports.updateFreelancer = async (req, res) => {
   console.log("im in backend upload func");
@@ -119,7 +167,7 @@ exports.updateFreelancer = async (req, res) => {
     UserDescreption,
     ServiceDescription,
   } = req.body;
-  
+
   try {
     const newData = {
       ProfileDomain,
@@ -140,10 +188,10 @@ exports.updateFreelancer = async (req, res) => {
       UserDescreption,
       ServiceDescription,
     };
-    
+
     const updateRes = await User.findByIdAndUpdate(_id, newData);
 
-    const user = await User.findOne({ _id }).select('-password')
+    const user = await User.findOne({ _id }).select("-password");
 
     const payload = {
       _id: user._id,
@@ -169,12 +217,143 @@ exports.updateFreelancer = async (req, res) => {
       UserDescreption: user.UserDescreption,
       ServiceDescription: user.ServiceDescription,
       userType: user.userType,
-    }
+    };
 
     const token = await jwt.sign(payload, secretOrKey);
 
     return res.status(200).json({ token: `Bearer ${token}`, updateRes });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
 
+exports.uploadPrivateProject = async (req, res) => {
+  const {
+    projectDescription,
+    projectName,
+    freelancer,
+    projectOwner,
+    pack,
+  } = req.body;
+  console.log("req.body", req.body);
+  try {
+    const newProject = new Project({
+      projectName: projectName,
+      projectOwner: projectOwner,
+      projectDescription: projectDescription,
+      freelancerID: freelancer,
+      pack: pack,
+      projectType: "PRIVATE",
+      projectState: "En attente",
+      projectFinished: false,
+    });
+    const addedProject = await newProject.save();
+    await User.findByIdAndUpdate(
+      { _id: freelancer },
+      {
+        $push: {
+          waitingProjects: {
+            _id:addedProject._id
+          },
+        },
+      },
+      { new: true }
+    );
+    await User.findByIdAndUpdate(
+      { _id: projectOwner },
+      {
+        $push: {
+          waitingProjects: {
+            _id:addedProject._id
+          },
+        },
+      },
+      { new: true }
+    );
+    res.status(200).json(newProject);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ errors: error });
+  }
+};
+
+exports.getWaitingProjects = async (req,res) =>{
+  const projectIDs = req.body
+  try {
+    const projects = await Project.find({
+      '_id': { $in: projectIDs }
+  });
+    console.log('projects', projects.length)
+    return res.status(200).json(projects);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ errors: error })
+  }
+}
+
+exports.comment = async (req, res) => {
+  const { sender, comments, date, freelancerID } = req.body;
+  try {
+    const newComment = await User.findByIdAndUpdate(
+      { _id: freelancerID },
+      {
+        $push: {
+          comments: {
+            sender,
+            comments,
+            date,
+          },
+        },
+      },
+      { new: true }
+    );
+    res.status(201).json(newComment);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.rating = async (req, res) => {
+  const { sender, rateValue, freelancerID } = req.body;
+  try {
+    const newRating = await User.findByIdAndUpdate(
+      { _id: freelancerID },
+      {
+        $push: {
+          ratings: {
+            sender,
+            rateValue,
+          },
+        },
+      },
+      { new: true }
+    );
+    res.status(201).json(newRating);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.responseToPrivateProject = async (req, res) => {
+  const { accept, projectID } = req.body;
+  let x = '';
+  if (accept) {
+    x = "le freelancer a accepté de travailler sur ce projet";
+  } else {
+    x = "Désolé, le freelancer n'a accepté de travailler sur ce projet";
+  }
+  console.log("x", x);
+  try {
+    const project = await Project.findByIdAndUpdate({ _id: projectID },
+      {
+       projectState: x
+      },
+      { new: true });
+
+    res.status(201).json(project);
   } catch (error) {
     console.error(error);
     res.status(500).json(error);
