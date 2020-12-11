@@ -70,23 +70,22 @@ exports.uploadPublicProject = async (req, res) => {
       skill,
       projectType: "PUBLIC",
       projectFinished: false,
+      projectState: "En attente",
+      projectReceived: false,
     });
+    const addedProject = await newProject.save();
     await User.findByIdAndUpdate(
       { _id: projectOwner },
       {
         $push: {
-          actualProjects: {
-            projectName,
-            projectDescription,
-            projectOwner,
-            projectType: "PUBLIC",
+          waitingProjects: {
+            _id: addedProject._id,
           },
         },
       },
       { new: true }
     );
-    newProject.save();
-    res.status(200).json(newProject);
+    res.status(200).json(addedProject);
   } catch (error) {
     console.error(error);
     res.status(500).json({ errors: error });
@@ -109,8 +108,6 @@ exports.login = async (req, res) => {
       familyName: user.familyName,
       email: user.email,
       userType: user.userType,
-      waitingProjects: user.waitingProjects,
-      actualProjects: user.actualProjects,
     };
 
     const token = await jwt.sign(payload, secretOrKey);
@@ -136,7 +133,6 @@ exports.getSelectedProfile = async (req, res) => {
   const _id = req.headers._id;
   try {
     const selectedProfile = await User.findById({ _id });
-    // console.log('selectedProfile', selectedProfile)
     return res.status(200).json({ selectedProfile });
   } catch (error) {
     console.error(error);
@@ -236,7 +232,6 @@ exports.uploadPrivateProject = async (req, res) => {
     projectOwner,
     pack,
   } = req.body;
-  console.log("req.body", req.body);
   try {
     const newProject = new Project({
       projectName: projectName,
@@ -247,6 +242,7 @@ exports.uploadPrivateProject = async (req, res) => {
       projectType: "PRIVATE",
       projectState: "En attente",
       projectFinished: false,
+      projectReceived: false,
     });
     const addedProject = await newProject.save();
     await User.findByIdAndUpdate(
@@ -254,7 +250,7 @@ exports.uploadPrivateProject = async (req, res) => {
       {
         $push: {
           waitingProjects: {
-            _id:addedProject._id
+            _id: addedProject._id,
           },
         },
       },
@@ -265,7 +261,7 @@ exports.uploadPrivateProject = async (req, res) => {
       {
         $push: {
           waitingProjects: {
-            _id:addedProject._id
+            _id: addedProject._id,
           },
         },
       },
@@ -278,19 +274,21 @@ exports.uploadPrivateProject = async (req, res) => {
   }
 };
 
-exports.getWaitingProjects = async (req,res) =>{
-  const projectIDs = req.body
+exports.getWaitingProjects = async (req, res) => {
+  const { waitingProjectsIDs, actualProjectsIDs } = req.body;
   try {
-    const projects = await Project.find({
-      '_id': { $in: projectIDs }
-  });
-    console.log('projects', projects.length)
-    return res.status(200).json(projects);
+    const waitingProjects = await Project.find({
+      _id: { $in: waitingProjectsIDs },
+    });
+    const actualProjects = await Project.find({
+      _id: { $in: actualProjectsIDs },
+    });
+    return res.status(200).json({ waitingProjects, actualProjects });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ errors: error })
+    res.status(500).json({ errors: error });
   }
-}
+};
 
 exports.comment = async (req, res) => {
   const { sender, comments, date, freelancerID } = req.body;
@@ -338,22 +336,261 @@ exports.rating = async (req, res) => {
 };
 
 exports.responseToPrivateProject = async (req, res) => {
-  const { accept, projectID } = req.body;
-  let x = '';
+  const { accept, projectID, projectOwner, freelancer } = req.body;
+  let x = "";
   if (accept) {
-    x = "le freelancer a accepté de travailler sur ce projet";
+    x = "Le freelancer a accepté de travailler sur ce projet";
   } else {
-    x = "Désolé, le freelancer n'a accepté de travailler sur ce projet";
+    x = "Désolé, le freelancer n'a pas accepté de travailler sur ce projet";
   }
-  console.log("x", x);
   try {
-    const project = await Project.findByIdAndUpdate({ _id: projectID },
+    const project = await Project.findByIdAndUpdate(
+      { _id: projectID },
       {
-       projectState: x
+        projectState: x,
       },
-      { new: true });
+      { new: true }
+    );
+    if (accept) {
+      await User.findByIdAndUpdate(
+        { _id: freelancer },
+        {
+          $push: {
+            actualProjects: {
+              _id: projectID,
+            },
+          },
+        },
+        { new: true }
+      );
+    }
+    const updatedFreelancer = await User.findByIdAndUpdate(
+      { _id: freelancer },
+      {
+        $pull: { waitingProjects: projectID },
+      },
+      { new: true }
+    );
+    res.status(201).json({ project, updatedFreelancer });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
 
-    res.status(201).json(project);
+exports.deleteProject = async (req, res) => {
+  const { projectID, projectOwnerID, freelancerID } = req.body;
+  try {
+    const deletedProject = await Project.findByIdAndDelete(projectID);
+    const updatedOwner = await User.findByIdAndUpdate(
+      { _id: projectOwnerID },
+      {
+        $pull: { waitingProjects: projectID },
+      },
+      { new: true }
+    );
+    await User.updateMany(
+      {_id:{ $in: freelancerID } },
+      {
+        $pull: { waitingProjects: projectID },
+      }
+    );
+    console.log(
+      "🚀 ~ file: user.controller.js ~ line 402 ~ exports.deleteProject ~ updatedOwner",
+      updatedOwner
+    );
+    res.status(201).json({ updatedOwner, deletedProject });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.getEmail = async (req, res) => {
+  const { _id } = req.headers;
+  try {
+    const client = await User.findById(_id);
+    res.status(201).json(client.email);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.updateFinishedProject = async (req, res) => {
+  const { projectID } = req.body;
+  try {
+    const projectFinished = await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        projectFinished: true,
+      },
+      { new: true }
+    );
+    await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        projectState: "Le projet est terminé",
+      },
+      { new: true }
+    );
+    await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        projectNotReceived: "",
+      },
+      { new: true }
+    );
+    console.log(
+      "🚀 ~ file: user.controller.js ~ line 429 ~ exports.updateFinishedProject= ~ projectFinished",
+      projectFinished
+    );
+    res.status(201).json(projectFinished);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.updateRecievedProject = async (req, res) => {
+  const { recieved, projectID, freelancerID, projectOwnerID } = req.body;
+  try {
+    const projectRecieved = await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        projectReceived: recieved,
+      },
+      { new: true }
+    );
+    if (!recieved) {
+      await Project.findByIdAndUpdate(
+        { _id: projectID },
+        {
+          projectNotReceived:
+            "Le recrutteur n'a pas reçu le projet veillez reéssayer",
+        },
+        { new: true }
+      );
+    }
+    if (recieved) {
+      await Project.findByIdAndDelete(projectID);
+      await User.findByIdAndUpdate(
+        { _id: projectOwnerID },
+        {
+          $pull: { waitingProjects: projectID },
+        },
+        { new: true }
+      );
+      await User.findByIdAndUpdate(
+        { _id: freelancerID },
+        {
+          $pull: { actualProjects: projectID },
+        },
+        { new: true }
+      );
+    }
+    res.status(201).json(projectRecieved);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.getPublicProjects = async (req, res) => {
+  const { skill } = req.headers;
+  try {
+    const list = await Project.find({ skill });
+    return res.status(200).json({ list });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.workOnPublicProject = async (req, res) => {
+  const { projectID, freelancerID } = req.body;
+  try {
+    const freelancer = await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        $push: {
+          freelancers: {
+            _id: freelancerID,
+          },
+        },
+      },
+      { new: true }
+    );
+    await User.findByIdAndUpdate(
+      { _id: freelancerID },
+      {
+        $push: {
+          waitingProjects: {
+            _id: projectID,
+          },
+        },
+      },
+      { new: true }
+    );
+    return res.status(200).json(freelancer);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.getFreelancersWorkinOnPublicProject = async (req, res) => {
+  const { freelancerIDs } = req.body;
+  console.log(
+    "🚀 ~ file: user.controller.js ~ line 558 ~ exports.getFreelancersWorkinOnPublicProject= ~ freelancerIDs",
+    freelancerIDs
+  );
+  try {
+    const freelancers = await User.find({
+      _id: { $in: freelancerIDs },
+    });
+    return res.status(200).json(freelancers);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json(error);
+  }
+};
+
+exports.hireThisFreelancer = async (req, res) => {
+  const { freelancerID, projectID, freelancerArray } = req.body;
+  try {
+    const hiredFreelancer = await User.findByIdAndUpdate(
+      { _id: freelancerID },
+      {
+        $push: {
+          actualProjects: {
+            _id: projectID,
+          },
+        },
+      },
+      { new: true }
+    );
+    await Project.findByIdAndUpdate(
+      { _id: projectID },
+      {
+        isTaken: freelancerID,
+      },
+      { new: true }
+    );
+    await Project.findOneAndUpdate(
+      { _id: projectID },
+      {
+        freelancers: [],
+      },
+      { new: true }
+    );
+    await User.updateMany(
+      {_id:{ $in: freelancerArray} },
+      {
+        $pull: { waitingProjects: projectID },
+      }
+    )
+    return res.status(200).json(hiredFreelancer);
   } catch (error) {
     console.error(error);
     res.status(500).json(error);

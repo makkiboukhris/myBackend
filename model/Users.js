@@ -63,14 +63,15 @@ const contactSchema = mongoose.Schema({
     type: String,
   },
 
-  waitingProjects: [
-    {
+  waitingProjects: [{
       type: Schema.Types.ObjectId,
       ref: "Project",
-    },
-  ],
+    }],
 
-  actualProjects: [{}],
+  actualProjects: [{
+    type: Schema.Types.ObjectId,
+    ref: "Project",
+  }],
 
   ratings: [{}],
 

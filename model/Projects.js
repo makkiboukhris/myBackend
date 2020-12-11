@@ -12,7 +12,16 @@ const projectSchema = mongoose.Schema({
   freelancerID:mongoose.Schema.Types.ObjectId,
   projectState:String,
   projectFinished: Boolean,
+  projectReceived: Boolean,
+  projectNotReceived: String ,
   pack: String,
+  isTaken:{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  freelancers:[{
+    type: mongoose.Schema.Types.ObjectId,
+  }],
 });
 
 module.exports = Project = mongoose.model("project", projectSchema);
